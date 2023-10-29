@@ -1,0 +1,12 @@
+{"pattern_names": ["cyclic"],
+"imbalanced_ratio": 0.95,
+"no_samples": 1200,
+"dataset_distribution": {
+"train": {"normal": 570, "abnormal_0.2": 6, "abnormal_0.4": 6, "abnormal_0.6": 6, "abnormal_0.8": 6, "abnormal_1": 6},
+"valid": {"normal": 190, "abnormal_0.2": 2, "abnormal_0.4": 2, "abnormal_0.6": 2, "abnormal_0.8": 2, "abnormal_1": 2},
+"imbalanced_test": {"normal": 190, "abnormal_0.2": 2, "abnormal_0.4": 2, "abnormal_0.6": 2, "abnormal_0.8": 2, "abnormal_1": 2},
+"balanced_test": {"normal": 100, "abnormal_0.2": 20, "abnormal_0.4": 20, "abnormal_0.6": 20, "abnormal_0.8": 20, "abnormal_1": 20}},
+"no_electing_datasets": 10,
+"no_replications": 2,
+"max_steps": 5
+}

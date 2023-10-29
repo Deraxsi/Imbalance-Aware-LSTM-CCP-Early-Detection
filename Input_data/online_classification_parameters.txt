@@ -1,0 +1,8 @@
+{"RandomSearch": {"max_trials": 1, "executions_per_trial": 1},
+"Hyperband": {"max_epochs": 9, "factor": 3, "hyperband_iterations": 1, "executions_per_trial": 1},
+"BayesianOptimization": {"max_trials": 7, "no_initial_points": 3, "executions_per_trial": 1},
+"layer_candidates": [2],
+"subclass_weights": {"normal": 1, "abnormal_0.2": 0.2, "abnormal_0.4": 0.4, "abnormal_0.6": 0.6, "abnormal_0.8": 0.8, "abnormal_1": 1}
+}
+
+

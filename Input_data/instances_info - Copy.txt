@@ -1,0 +1,11 @@
+{"pattern_names": ["uptrend", "downtrend", "upshift", "downshift", "systematic", "stratification", "cyclic"],
+"imbalanced_ratio": 0.95,
+"no_samples": 6000,
+"dataset_distribution": {
+"train": {"normal": 2850, "abnormal_0.2": 30, "abnormal_0.4": 30, "abnormal_0.6": 30, "abnormal_0.8": 30, "abnormal_1": 30},
+"valid": {"normal": 950, "abnormal_0.2": 10, "abnormal_0.4": 10, "abnormal_0.6": 10, "abnormal_0.8": 10, "abnormal_1": 10},
+"imbalanced_test": {"normal": 950, "abnormal_0.2": 10, "abnormal_0.4": 10, "abnormal_0.6": 10, "abnormal_0.8": 10, "abnormal_1": 10},
+"balanced_test": {"normal": 1000, "abnormal_0.2": 200, "abnormal_0.4": 200, "abnormal_0.6": 200, "abnormal_0.8": 200, "abnormal_1": 200}},
+"no_electing_datasets": 10,
+"no_replications": 2
+}

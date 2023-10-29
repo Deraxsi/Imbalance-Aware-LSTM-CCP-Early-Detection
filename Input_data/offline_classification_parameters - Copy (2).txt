@@ -1,0 +1,10 @@
+{"RandomSearch": {"max_trials": 1, "executions_per_trial": 1},
+"Hyperband": {"max_epochs": 9, "factor": 3, "hyperband_iterations": 1, "executions_per_trial": 1},
+"BayesianOptimization": {"max_trials": 25, "no_initial_points": 15, "executions_per_trial": 1},
+"layer_candidates": [2, 3, 4, 5],
+"batch_size_candidates": [300],
+"alpha_candidates": [0.1, 0.25, 0.33333, 0.5, 1.0, 2.0, 3.0, 4.0, 10.0],
+"maximum_no_epochs": 800,
+"minimum_no_epochs": 10,
+"patience": 180
+}
