@@ -1,0 +1,1 @@
+{"Stratified sampling, with cost-sensitive loss-function and inequitable sub-class weighting": 0.682331992845057, "Stratified sampling, with regular-loss function": 0.0, "The_best_strategy": "Stratified sampling, with cost-sensitive loss-function and inequitable sub-class weighting"}
