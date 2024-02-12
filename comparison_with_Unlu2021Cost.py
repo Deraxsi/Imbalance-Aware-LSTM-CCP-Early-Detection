@@ -1,5 +1,9 @@
 import os
 
+import tensorflow.keras.losses
+
+from sklearn.utils import shuffle
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # noqa: E402
 
 import re
@@ -20,7 +24,11 @@ import tensorflow as tf
 
 from tensorflow.keras.utils import get_custom_objects
 
-from tensorflow.keras.optimizers import Nadam
+from tensorflow.keras.optimizers import Nadam, Adam
+
+from tensorflow.keras.losses import MeanSquaredError
+
+from tensorflow.keras.callbacks import EarlyStopping
 
 from tensorflow.keras import Model, Input
 
@@ -661,6 +669,7 @@ class Classifiers:
         train_datapoints = dataset['train']
 
         valid_data, valid_batch_size = self.valid_data_provider(dataset['valid'], dataset_distribution['valid'])
+        test_data, test_batch_size = self.valid_data_provider(dataset['test'], dataset_distribution['test'])
 
         batch_size = self.hp["batch_size"]
 
@@ -710,7 +719,13 @@ class Classifiers:
 
         trained_classifier = history.model
 
-        return trained_classifier
+        metrics_test = dict(zip(trained_classifier.metrics_names,
+                                trained_classifier.evaluate(test_data[0], test_data[1], batch_size=test_batch_size,
+                                                            verbose=0)
+                                )
+                            )
+
+        return trained_classifier, metrics_test
 
     def detection_time_quantifier(self):
         pass
@@ -1028,16 +1043,137 @@ class MultiObjectiveEarlyStopping(tf.keras.callbacks.Callback):
                 print(f"\n The best weights for the network are retrieved from epoch {self.best_epoch}")
 
 
+class UnluClassifiers:
+
+    def __init__(self, imbalanced_ratio, is_cost_sensitive):
+        self.imbalanced_ratio = imbalanced_ratio
+        self.is_cost_sensitive = is_cost_sensitive
+
+    def build(self, time_window):
+
+        input_layer = Input(shape=(time_window, 1))
+        no_layers = 3
+        x = input_layer
+        for layer in range(1, no_layers + 1):
+
+            x = Bidirectional(
+                LSTM(units=16,
+                     activation='tanh',
+                     dropout=0.2,
+                     recurrent_activation='sigmoid',
+                     recurrent_dropout=0,
+                     unroll=False,
+                     use_bias=True,
+                     return_sequences=True if layer < no_layers else False))(x)
+
+        output_layer = Dense(units=1, activation=tf.nn.sigmoid)(x)
+
+        model = Model(input_layer, output_layer)
+
+        optimizer = Adam(0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-3, amsgrad=False)
+
+        metrics = [
+            Specificity(),
+            Sensitivity(),
+            tf.keras.metrics.BinaryAccuracy(name='accuracy'),
+            GeometricMean()
+        ]
+
+        loss = tensorflow.keras.losses.BinaryCrossentropy()  # todo: correct this
+
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics, run_eagerly=False)
+
+        return model
+
+    def data_provider(self, datapoints, datapoints_sizes):
+        names = list(datapoints.keys())
+        features = {name: np.reshape(datapoints[name][0], (datapoints_sizes[name], -1, 1))
+                    for name in names}
+        labels = {name: np.reshape(np.ceil(datapoints[name][1]), (datapoints_sizes[name], -1))
+                  for name in names}
+
+        x_batch = np.concatenate(list(features.values()), axis=0)
+        y_batch = np.concatenate(list(labels.values()), axis=0)
+
+        x_batch_shuffled, y_batch_shuffled = shuffle(x_batch, y_batch)
+
+        # return x_batch, y_batch
+
+        return x_batch_shuffled, y_batch_shuffled
+
+        # weights = {}
+        # for name in names:
+        #     if name == "normal":
+        #         if self.is_equitable:
+        #             weights[name] = np.array([1 / self.imbalanced_ratio] * datapoints_sizes[name])
+        #         else:
+        #             # total_inequity = (1 / (1 - self.imbalanced_ratio)) * \
+        #             #                  sum([datapoints_sizes[name] * (1 - self.subclass_weights[name])
+        #             #                       for name in names if name != 'normal'])
+        #             # weights[name] = np.array([1 / self.imbalanced_ratio -
+        #             #                           total_inequity / datapoints_sizes[name]] * datapoints_sizes[name])
+        #             upperbound = max(self.subclass_weights.values())
+        #             total_inequity = (1 / (1 - self.imbalanced_ratio)) * sum(
+        #                 [datapoints_sizes[name] * (upperbound - self.subclass_weights[name])
+        #                  for name in names if not name == 'normal'])
+        #
+        #             weights[name] = np.array([(self.subclass_weights[name] / self.imbalanced_ratio) - \
+        #                                       (total_inequity / datapoints_sizes[name])] * datapoints_sizes[name])
+        #     else:
+        #         if self.is_equitable:
+        #             weights[name] = np.array([1 / (1 - self.imbalanced_ratio)] * datapoints_sizes[name])
+        #         else:
+        #             weights[name] = np.array([self.subclass_weights[name] / (1 - self.imbalanced_ratio)] *
+        #                                      datapoints_sizes[name])
+        #
+        #     weights[name] = np.reshape(weights[name], newshape=(-1, 1))
+        #
+        # x_batch = np.concatenate(list(features.values()), axis=0)
+        # y_batch = np.concatenate(list(labels.values()), axis=0)
+        # sw_batch = np.concatenate(list(weights.values()), axis=0)
+        #
+        # if not self.is_cost_sensitive:
+        #     sw_batch = None
+        #
+        # valid_data = x_batch, y_batch, sw_batch
+        # valid_batch_size = sum(datapoints_sizes.values())
+        # return valid_data, valid_batch_size
+
+    def fit_per_dataset(self, model, dataset, dataset_distribution):
+        train_data = self.data_provider(dataset['train'], dataset_distribution['train'])
+        valid_data = self.data_provider(dataset['valid'], dataset_distribution['valid'])
+        test_data = self.data_provider(dataset['test'], dataset_distribution['test'])
+
+        total = train_data[1].shape[0]
+        positives = sum(train_data[1])
+        negatives = total - positives
+
+        if self.is_cost_sensitive:
+            class_weight = {0: total/negatives, 1: total/positives}
+        else:
+            class_weight = None
+        monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=0, mode='auto')
+        model.fit(x=train_data[0], y=train_data[1], validation_data=valid_data, callbacks=[monitor], epochs=400,
+                  batch_size=50, verbose=0, class_weight=class_weight)
+
+        test_size = test_data[1].shape[0]
+        metrics_test = dict(zip(model.metrics_names,
+                                model.evaluate(test_data[0], test_data[1], batch_size=test_size, verbose=0)))
+
+        return model, metrics_test
+
+
 class Experimenter:
     def __init__(self, pattern_name, time_window, abnormality_value, imbalanced_ratio=0.95,
                  detection_horizon=120, sizes=None):
 
         if sizes is None:
-            sizes = (3000, 1000, 300)
+            sizes = (3000, 1000, 1000, 300)
 
         self.no_trains = sizes[0]
         self.no_valids = sizes[1]
         self.no_tests = sizes[2]
+        self.no_tests_early_detection = sizes[3]
 
         self.imbalanced_ratio = imbalanced_ratio
         self.pattern_name = pattern_name
@@ -1061,11 +1197,19 @@ class Experimenter:
     def datasets_sizes_specifier(self):
         no_normals_train = round(self.no_trains * self.imbalanced_ratio)
         no_abnormals_train = round(self.no_trains * (1 - self.imbalanced_ratio))
+
         no_normals_valid = round(self.no_valids * self.imbalanced_ratio)
         no_abnormals_valid = round(self.no_valids * (1 - self.imbalanced_ratio))
+
+        no_normals_test = round(self.no_tests * self.imbalanced_ratio)
+        no_abnormals_test = round(self.no_tests * (1 - self.imbalanced_ratio))
+
         no_subabnormals_train = round(no_abnormals_train / 5)
         no_subabnormals_valid = round(no_abnormals_valid / 5)
+        no_subabnormals_test = round(no_abnormals_test / 5)
+
         assert no_normals_train + no_abnormals_train == self.no_trains
+        assert no_normals_test + no_abnormals_test == self.no_tests
 
         mixed_distribution = {"train": {"normal": no_normals_train,
                                         "abnormal_0.2": no_subabnormals_train,
@@ -1078,10 +1222,17 @@ class Experimenter:
                                         "abnormal_0.4": no_subabnormals_valid,
                                         "abnormal_0.6": no_subabnormals_valid,
                                         "abnormal_0.8": no_subabnormals_valid,
-                                        "abnormal_1": no_subabnormals_valid}}
+                                        "abnormal_1": no_subabnormals_valid},
+                              "test": {"normal": no_normals_test,
+                                       "abnormal_0.2": no_subabnormals_test,
+                                       "abnormal_0.4": no_subabnormals_test,
+                                       "abnormal_0.6": no_subabnormals_test,
+                                       "abnormal_0.8": no_subabnormals_test,
+                                       "abnormal_1": no_subabnormals_test}}
 
         convn_distribution = {"train": {"normal": no_normals_train, "abnormal_1": no_abnormals_train},
-                              "valid": {"normal": no_normals_valid, "abnormal_1": no_abnormals_valid}}
+                              "valid": {"normal": no_normals_valid, "abnormal_1": no_abnormals_valid},
+                              "test": {"normal": no_normals_test, "abnormal_1": no_abnormals_test}}
 
         self.mixed_distribution = mixed_distribution
         self.convn_distribution = convn_distribution
@@ -1111,10 +1262,13 @@ class Experimenter:
         self.mixed_scaler = mixed_scaler
         self.convn_scaler = convn_scaler
 
-        test_data = mixed_charts.test_data_generator(self.pattern_name, self.time_window, self.abnormality_value,
-                                                     self.no_tests, self.detection_horizon)
+        early_detection_test_data = mixed_charts.test_data_generator(self.pattern_name,
+                                                                     self.time_window,
+                                                                     self.abnormality_value,
+                                                                     self.no_tests_early_detection,
+                                                                     self.detection_horizon)
 
-        self.test_data = test_data
+        self.early_detection_test_data = early_detection_test_data
 
     def trainer(self):
         # load training info
@@ -1137,8 +1291,9 @@ class Experimenter:
 
         # train classifiers
         trained_classifiers = {}
-        for chart_type in ['mixed', 'convn']:
-            for is_cost_sensitive in [True, False]:
+        evaluations_on_test = {}
+        for chart_type in ['mixed']:  # ['mixed', 'convn']:
+            for is_cost_sensitive in [True]:  # [True, False]:
                 classifier = Classifiers(hp=best_model,
                                          imbalanced_ratio=self.imbalanced_ratio,
                                          strategy_name=best_strategy,
@@ -1149,16 +1304,37 @@ class Experimenter:
                                          is_cost_sensitive=is_cost_sensitive,
                                          chart_type=chart_type)
 
+                unlu_cost2021 = UnluClassifiers(imbalanced_ratio=self.imbalanced_ratio,
+                                                is_cost_sensitive=is_cost_sensitive)
+                unlu_lstm = unlu_cost2021.build(self.time_window)
+
                 if chart_type == 'mixed':
-                    trained_classifier = classifier.fit_per_dataset(self.mixed_data, self.time_window,
-                                                                    self.abnormality_value, self.mixed_distribution)
+                    trained_classifier, metrics_on_test = classifier.fit_per_dataset(self.mixed_data,
+                                                                                     self.time_window,
+                                                                                     self.abnormality_value,
+                                                                                     self.mixed_distribution)
+
+                    trained_unlu_model, metrics_on_test_unlu = unlu_cost2021.fit_per_dataset(unlu_lstm,
+                                                                                             self.mixed_data,
+                                                                                             self.mixed_distribution)
+
                 else:
-                    trained_classifier = classifier.fit_per_dataset(self.convn_data, self.time_window,
-                                                                    self.abnormality_value, self.convn_distribution)
+                    trained_classifier, metrics_on_test = classifier.fit_per_dataset(self.convn_data,
+                                                                                     self.time_window,
+                                                                                     self.abnormality_value,
+                                                                                     self.convn_distribution)
+
+                    trained_unlu_model, metrics_on_test_unlu = unlu_cost2021.fit_per_dataset(unlu_lstm,
+                                                                                             self.convn_data,
+                                                                                             self.convn_distribution)
 
                 trained_classifiers[f'{chart_type}_CS={str(is_cost_sensitive)[0]}'] = trained_classifier
+                evaluations_on_test[f'{chart_type}_CS={str(is_cost_sensitive)[0]}'] = metrics_on_test
 
-        return trained_classifiers
+                trained_classifiers[f'{chart_type}_CS={str(is_cost_sensitive)[0]}_Unlu'] = trained_unlu_model
+                evaluations_on_test[f'{chart_type}_CS={str(is_cost_sensitive)[0]}_Unlu'] = metrics_on_test_unlu
+
+        return trained_classifiers, evaluations_on_test
 
     # def detection_time_evaluator(self, classifier, scaler):
     #
@@ -1188,21 +1364,21 @@ class Experimenter:
 
     def detection_time_evaluator(self, classifier, scaler):
 
-        windowed_data = self.rolling_window_strider(self.test_data, self.time_window)
+        windowed_data = self.rolling_window_strider(self.early_detection_test_data, self.time_window)
 
-        no_rolls = self.test_data.shape[-1] - self.time_window + 1
+        no_rolls = self.early_detection_test_data.shape[-1] - self.time_window + 1
 
         reshaped_windows = windowed_data.reshape(-1, self.time_window)
 
         normalized_windows = scaler.transform(reshaped_windows)
 
-        normalized_windows = normalized_windows.reshape(self.no_tests, no_rolls, self.time_window)
+        normalized_windows = normalized_windows.reshape(self.no_tests_early_detection, no_rolls, self.time_window)
 
         normalized_windows = normalized_windows.reshape(-1, self.time_window, 1)
 
         predictions = classifier.predict(normalized_windows) > 0.5
 
-        reshaped_predictions = predictions.reshape(self.no_tests, no_rolls)
+        reshaped_predictions = predictions.reshape(self.no_tests_early_detection, no_rolls)
 
         detection_times = np.argmax(reshaped_predictions, axis=1) + 1
 
@@ -1211,7 +1387,7 @@ class Experimenter:
         detection_times[mask] = np.nan
 
         # calculationn of undetected samples percentage and TASRID, and TAR
-        undetected_samples_percentage = np.isnan(detection_times).sum() / self.test_data.shape[0]
+        undetected_samples_percentage = np.isnan(detection_times).sum() / self.early_detection_test_data.shape[0]
         true_alert_streaks_rates_from_initial_detection = np.apply_along_axis(
             self.calculate_longest_consecutive_true_detection,
             axis=1,
@@ -1269,7 +1445,7 @@ class Experimenter:
         return detection_times
 
     def main(self):
-        trained_classifiers = self.trainer()
+        trained_classifiers, evaluations_on_test = self.trainer()
         detection_times = {}
         detection_rates = {}
         for trainer_id in trained_classifiers.keys():
@@ -1288,7 +1464,7 @@ class Experimenter:
         df_time.insert(2, 'Time Window', self.time_window)
         df_time.insert(3, 'Abnormality Value', self.abnormality_value)
 
-        saving_directory = os.path.join(os.getcwd(), 'Early Detection Analysis', 'Detection Times', self.pattern_name)
+        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Detection Times', self.pattern_name)
         os.makedirs(saving_directory, exist_ok=True)
         # saving_name = f"{self.time_window}_{self.abnormality_value}_{self.imbalanced_ratio}.csv"
         saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
@@ -1301,10 +1477,24 @@ class Experimenter:
         df_rates.insert(1, 'Imbalanced Ratio', self.imbalanced_ratio)
         df_rates.insert(2, 'Time Window', self.time_window)
         df_rates.insert(3, 'Abnormality Value', self.abnormality_value)
-        saving_directory = os.path.join(os.getcwd(), 'Early Detection Analysis', 'Detection Rates', self.pattern_name)
+        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Detection Rates', self.pattern_name)
         os.makedirs(saving_directory, exist_ok=True)
         saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
         df_rates.to_csv(os.path.join(saving_directory, saving_name), index=False)
+
+        df_evaluations_on_test = pd.DataFrame(evaluations_on_test)
+        mdf_evaluations_on_test = df_evaluations_on_test.T
+        mdf_evaluations_on_test.insert(0, "Pattern Name", self.pattern_name)
+        mdf_evaluations_on_test.insert(1, "Imbalanced Ratio", self.imbalanced_ratio)
+        mdf_evaluations_on_test.insert(2, "Time Window", self.time_window)
+        mdf_evaluations_on_test.insert(3, "Abnormality Value", self.abnormality_value)
+        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Test Evaluations', self.pattern_name)
+        os.makedirs(saving_directory, exist_ok=True)
+        saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
+        mdf_evaluations_on_test.to_csv(os.path.join(saving_directory, saving_name), index=True)
+
+        print('done')
+
 
 
 if __name__ == "__main__":
