@@ -1,8 +1,10 @@
 
 import os
 from turtle import width
+import re
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import pandas as pd
 import numpy as np
 import seaborn as sb
@@ -14,13 +16,13 @@ def get_combined_method(row):
     cost_sensitivity = row['cost_sensitivity']
 
     if method == 'MRDS' and cost_sensitivity:
-        return 'MRDS-CS'
+        return 'CSBiLSTM - MRDS'
     elif method == 'MRDS' and not cost_sensitivity:
-        return 'MRDS-CI'
+        return 'BiLSTM - MRDS'
     elif method == 'conventional' and cost_sensitivity:
-        return 'Conv-CS'
+        return 'CSBiLSTM - AUDS'
     elif method == 'conventional' and not cost_sensitivity:
-        return 'Conv-CI'
+        return 'BiLSTM - AUDS'
     else:
         raise ValueError("Error in the combined methods")
 
@@ -50,7 +52,7 @@ def draw_wins_per_time_window(time_window, dataframe):
     pivot_table = df.pivot_table(index=['Pattern Name', 'Abnormality Value'], columns='Methods',
                                  values='btest_gmean', aggfunc='first').reset_index()
 
-    methods = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    methods = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
 
     pivot_table['Winning Value'] = pivot_table[methods].max(axis=1)
 
@@ -87,7 +89,8 @@ def draw_average_btest_gmeans_per_time_window(time_window, dataframe):
                                  values='btest_gmean', aggfunc='first').reset_index()
 
     # methods = ['Conventional (CI)', 'Conventional (CS)', 'MRDS (CI)', 'MRDS (CS)']
-    methods = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    # methods = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    methods = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
     group_df = pivot_table.groupby(["Pattern Name"])[methods].mean().reset_index()
     melted_data = group_df.melt(id_vars='Pattern Name', var_name='Methods', value_name='G-means')
 
@@ -241,7 +244,7 @@ def early_stopping_aggregated_gmean_comparison():
 def average_time_to_detect_analysis():
 
     custom_palette = ["#9370DB", "#FFA07A", "#FF6347", "#4682B4"]
-    columns_to_plot = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    columns_to_plot = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
 
     # create a custom legend for all figures
     legend_fig, ax = plt.subplots(figsize=(10, 1))
@@ -253,9 +256,9 @@ def average_time_to_detect_analysis():
     for color, label in zip(custom_palette, columns_to_plot):
         plt.bar(0, 0, color=color, label=label)
 
-    legend = plt.legend(loc='center', frameon=False, ncol=len(columns_to_plot), fontsize='x-large')
+    legend = plt.legend(loc='center', frameon=False, ncol=len(columns_to_plot), fontsize='20')
     for handle in legend.legendHandles:
-        handle.set_height(14)
+        handle.set_height(18)
     legends_saving_directory = os.path.join(os.getcwd(), "Early Detection Analysis", "ARL", 'Time-To-Detect')
     os.makedirs(legends_saving_directory, exist_ok=True)
     legend_fig.savefig(os.path.join(legends_saving_directory, 'arl_legends.png'), dpi=300, bbox_inches='tight')
@@ -268,8 +271,8 @@ def average_time_to_detect_analysis():
         df = pd.read_csv(os.path.join(os.getcwd(), "Early Detection Analysis",
                                       "Detection Times", pattern, f"{pattern}.csv"))
 
-        df.rename(columns={"mixed_CS=T": "MRDS-CS", "mixed_CS=F": "MRDS-CI",
-                           "convn_CS=T": "Conv-CS", "convn_CS=F": "Conv-CI"}, inplace=True)
+        df.rename(columns={"mixed_CS=T": 'CSBiLSTM - MRDS', "mixed_CS=F": 'BiLSTM - MRDS',
+                           "convn_CS=T": 'CSBiLSTM - AUDS', "convn_CS=F": "BiLSTM - AUDS"}, inplace=True)
 
         average_time_to_detect = df.groupby(["Pattern Name", "Time Window", "Imbalanced Ratio",
                                              "Abnormality Value"], as_index=False).mean()
@@ -327,7 +330,7 @@ def count_nan(series):
 def average_detection_failure():
 
     custom_palette = ["#9370DB", "#FFA07A", "#FF6347", "#4682B4"]
-    columns_to_plot = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    columns_to_plot = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
 
     # create a custom legend for all figures
     legend_fig, ax = plt.subplots(figsize=(10, 1))
@@ -356,16 +359,16 @@ def average_detection_failure():
         df = pd.read_csv(os.path.join(os.getcwd(), "Early Detection Analysis",
                                       "Detection Times", pattern, f"{pattern}.csv"))
 
-        df.rename(columns={"mixed_CS=T": "MRDS-CS", "mixed_CS=F": "MRDS-CI",
-                           "convn_CS=T": "Conv-CS", "convn_CS=F": "Conv-CI"}, inplace=True)
+        df.rename(columns={"mixed_CS=T": 'CSBiLSTM - MRDS', "mixed_CS=F": 'BiLSTM - MRDS',
+                           "convn_CS=T": 'CSBiLSTM - AUDS', "convn_CS=F": "BiLSTM - AUDS"}, inplace=True)
 
         failure_percentage = df.groupby(["Pattern Name",
                                          "Imbalanced Ratio",
                                          "Time Window",
-                                         "Abnormality Value"]).agg({"MRDS-CS": count_nan,
-                                                                    "MRDS-CI": count_nan,
-                                                                    "Conv-CS": count_nan,
-                                                                    "Conv-CI": count_nan}).reset_index()
+                                         "Abnormality Value"]).agg({"CSBiLSTM - MRDS": count_nan,
+                                                                    "BiLSTM - MRDS": count_nan,
+                                                                    "CSBiLSTM - AUDS": count_nan,
+                                                                    "BiLSTM - AUDS": count_nan}).reset_index()
 
         grouped_ftd = failure_percentage.groupby(["Pattern Name", "Time Window", "Imbalanced Ratio"],
                                                  as_index=False).mean()
@@ -415,7 +418,7 @@ def average_detection_failure():
 def abnormality_value_analyzer():
 
     custom_palette = ["#9370DB", "#FFA07A", "#FF6347", "#4682B4"]
-    columns_to_plot = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    columns_to_plot = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
     line_styles = ['-.', ':', '--', '-']
     markers = ["D", "s", "^", "o"]
 
@@ -455,8 +458,9 @@ def abnormality_value_analyzer():
     for pattern in patterns:
         df = pd.read_csv(os.path.join(os.getcwd(), "Early Detection Analysis",
                                       "Detection Times", pattern, f"{pattern}.csv"))
-        df.rename(columns={"mixed_CS=T": "MRDS-CS", "mixed_CS=F": "MRDS-CI",
-                           "convn_CS=T": "Conv-CS", "convn_CS=F": "Conv-CI"}, inplace=True)
+
+        df.rename(columns={"mixed_CS=T": 'CSBiLSTM - MRDS', "mixed_CS=F": 'BiLSTM - MRDS',
+                           "convn_CS=T": 'CSBiLSTM - AUDS', "convn_CS=F": "BiLSTM - AUDS"}, inplace=True)
 
         time_windows = df['Time Window'].unique()
         imb_ratios = df['Imbalanced Ratio'].unique()
@@ -501,7 +505,7 @@ def abnormality_value_analyzer():
 def tasrid_analysis():
 
     custom_palette = ["#9370DB", "#FFA07A", "#FF6347", "#4682B4"]
-    columns_to_plot = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    columns_to_plot = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
 
     # create a custom legend for all figures
     legend_fig, ax = plt.subplots(figsize=(10, 1))
@@ -528,9 +532,8 @@ def tasrid_analysis():
         df = pd.read_csv(os.path.join(os.getcwd(), "Early Detection Analysis",
                                       "Detection Rates", pattern, f"{pattern}.csv"))
 
-        df.rename(columns={"mixed_CS=T": "MRDS-CS", "mixed_CS=F": "MRDS-CI",
-                           "convn_CS=T": "Conv-CS", "convn_CS=F": "Conv-CI"},
-                  inplace=True)
+        df.rename(columns={"mixed_CS=T": 'CSBiLSTM - MRDS', "mixed_CS=F": 'BiLSTM - MRDS',
+                           "convn_CS=T": 'CSBiLSTM - AUDS', "convn_CS=F": "BiLSTM - AUDS"}, inplace=True)
 
         df = df[df['Detection Rates Metrics'] == 'Mean True Alert Streaks from Initial Detection']
 
@@ -578,7 +581,7 @@ def tasrid_analysis():
 def tasrid_abnormality_value_analyzer():
 
     custom_palette = ["#9370DB", "#FFA07A", "#FF6347", "#4682B4"]
-    columns_to_plot = ['Conv-CI', 'Conv-CS', 'MRDS-CI', 'MRDS-CS']
+    columns_to_plot = ['BiLSTM - AUDS', 'CSBiLSTM - AUDS', 'BiLSTM - MRDS', 'CSBiLSTM - MRDS']
     line_styles = ['-.', ':', '--', '-']
     markers = ["D", "s", "^", "o"]
 
@@ -618,8 +621,9 @@ def tasrid_abnormality_value_analyzer():
     for pattern in patterns:
         df = pd.read_csv(os.path.join(os.getcwd(), "Early Detection Analysis", "Detection Rates", pattern,
                                       f"{pattern}.csv"))
-        df.rename(columns={"mixed_CS=T": "MRDS-CS", "mixed_CS=F": "MRDS-CI",
-                           "convn_CS=T": "Conv-CS", "convn_CS=F": "Conv-CI"}, inplace=True)
+
+        df.rename(columns={"mixed_CS=T": 'CSBiLSTM - MRDS', "mixed_CS=F": 'BiLSTM - MRDS',
+                           "convn_CS=T": 'CSBiLSTM - AUDS', "convn_CS=F": "BiLSTM - AUDS"}, inplace=True)
 
         df = df[df['Detection Rates Metrics'] == 'Mean True Alert Streaks from Initial Detection']
 
@@ -670,13 +674,13 @@ def best_selected_models_performance_comparisons():
                              'Systematic', 'Systematic',
                              'Cyclic', 'Cyclic',
                              'Stratification', 'Stratification'],
-            'Method': ['BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM',
-                       'BiLSTM', 'CS-BiLSTM'],
+            'Method': ['BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS',
+                       'BiLSTM - MRDS', 'CSBiLSTM - MRDS'],
             'Average G-mean': [0.166, 0.892,
                                0.497, 0.860,
                                0.0, 0.615,
@@ -700,18 +704,137 @@ def best_selected_models_performance_comparisons():
     plt.ylabel('Average G-mean', fontsize=14)
 
     # Show the plot
-    plt.xticks(rotation=45, ha="right", fontsize=12) # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45, ha="right", fontsize=12)
     plt.yticks(fontsize=12)
     plt.tight_layout()
     plt.legend(title='Method', loc='upper right')
     # plt.show()
-    saving_directory = 'D:\\PhD Degree\\Research Projects\\LSTM for CCPR'
+    saving_directory = 'D:\\PhD Degree\\Research Projects\\Imbalance-Aware LSTM for Early-Detection of CCP'
     plt.savefig(os.path.join(saving_directory, 'models_scores.pdf'), bbox_inches='tight')
 
 
+def interpret_kappa(row):
+    if row == 'loss_method':
+        return 0
+    elif row == 'gmean_method':
+        return 110
+    else:
+        # Use regular expression to find the kappa value in the format 'both_{kappa}_method'
+        match = re.search("both_([0-9]+\.?[0-9]*)+_method", row)
+        if match:
+            # If a match is found, convert the kappa value to float and return it
+            return float(match.group(1))
+        else:
+            # If no match is found, you might want to return a default value or None
+            raise ValueError("kappa is not found!")
+
+
+def early_stopping_insights():
+    file_name = os.path.join(os.getcwd(), 'Early-stopping', 'New-experiments', 'early-stoppings.xlsx')
+    df = pd.read_excel(file_name, sheet_name='early-stoppings')
+
+    df.rename(columns={"time_window": "Window Length", "abnormality_value": "Abnormality Value",
+                       "monitoring_method": "Monitoring Method"}, inplace=True)
+
+    df['Method'] = df['Monitoring Method'].apply(
+        lambda x: "LES" if x == 'loss_method' else ('GES' if x == 'gmean_method' else 'BES'))
+
+    df['Distance Valid'] = np.sqrt(df['valid_loss'] ** 2 + (df['valid_gmean'] - 1) ** 2)
+    df['Distance Test'] = np.sqrt(df['btest_loss'] ** 2 + (df['btest_gmean'] - 1) ** 2)
+
+    df['Kappa'] = df['Monitoring Method'].apply(interpret_kappa)
+
+    df['Min Distance Test'] = df.groupby(['Pattern',
+                                          'Window Length',
+                                          'Abnormality Value'])['Distance Test'].transform('min')
+
+    # Step 2: Identify rows with minimum 'Distance Test'
+    df['Is_Min'] = df['Distance Test'] == df['Min Distance Test']
+
+    # Step 3: Filter for winning rows and count wins by Kappa
+    winning_rows = df[df['Is_Min']]
+    win_counts = winning_rows.groupby(['Kappa', 'Pattern', 'Window Length']).size().reset_index(name='Wins')
+
+    # Step 4: Create pivot table
+    pivot_win_counts = win_counts.pivot_table(index=['Pattern', 'Window Length'], columns='Kappa', values='Wins',
+                                              fill_value=0)
+
+    win_counts_long = pivot_win_counts.reset_index().melt(id_vars=['Pattern', 'Window Length'], var_name='Kappa',
+                                                          value_name='Wins')
+
+    unique_combinations = win_counts_long[['Pattern', 'Window Length']].drop_duplicates()
+
+    saving_directory = os.path.join(os.getcwd(), "Early-stopping", "New-experiments", "Insights")
+    os.makedirs(saving_directory, exist_ok=True)
+
+    kappa_values = sorted(df['Kappa'].unique())
+    custom_labels = ['0' if kappa == 0.0 else r'$\infty$' if kappa == 110.0 else f"{kappa:.1f}" for kappa in
+                     kappa_values]
+
+    for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
+        pattern_data = win_counts_long[(win_counts_long['Pattern'] == row['Pattern']) &
+                                       (win_counts_long['Window Length'] == row['Window Length'])]
+
+        max_wins = pattern_data['Wins'].max()
+        custom_palette = ['#4682B4' if wins == max_wins else '#FF6347' for wins in pattern_data['Wins']]
+
+        plt.figure(figsize=(12, 6))
+        ax = sb.barplot(x='Kappa', y='Wins', data=pattern_data, palette=custom_palette, dodge=True, linewidth=1.)
+
+        plt.xlabel(r'$\kappa$', fontsize=24)
+        plt.ylabel('Total Wins', fontsize=18)
+
+        label_interval = 5
+        tick_positions = np.arange(len(kappa_values))
+        selected_ticks = tick_positions[::label_interval]
+        if selected_ticks[-1] != tick_positions[-1]:
+            selected_ticks = np.append(selected_ticks, tick_positions[-1])
+        selected_labels = [custom_labels[i] for i in selected_ticks]
+
+        ax.set_xticks(selected_ticks)
+        ax.set_xticklabels(selected_labels, rotation=45, fontsize=14)
+
+        y_ticks = np.arange(1, max_wins + 1, step=2)
+        ax.set_yticks(y_ticks)
+
+        max_value = pattern_data['Wins'].max()
+        ax.axhline(max_value, color='#4682B4', linestyle='--', linewidth=1)
+
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+
+        xtick_labels = ax.get_xticklabels()
+        xtick_labels[-1].set_fontsize(30)
+        xtick_labels[0].set_fontsize(26)
+
+        plt.tight_layout()
+        save_name = 'No. Wins ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
+        plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
+        plt.close()
+
+        #
+        #
+        #
+        # plt.figure(figsize=(8, 4))
+        #
+        # sb.lineplot(data=subset, y='Wins', x='Kappa')
+        # plt.title(f"Pattern: {row['Pattern']} | Window Length: {row['Window Length']}")
+        # plt.ylabel('Number of Wins')
+        # plt.xlabel(r'$\kappa$', fontsize=24)
+
+        # Show plot
+        # plt.tight_layout()
+        # save_name = 'No. Wins ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
+        # plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
+        # plt.close()
+
+    df.to_csv(os.path.join(saving_directory, 'igd_distances.csv'), index=False, float_format="%6f")
 
 
 
+
+
+#
 # draw_wins_per_time_window(50, df)
 # draw_wins_per_time_window(100, df)
 # #
@@ -725,11 +848,13 @@ def best_selected_models_performance_comparisons():
 # average_time_to_detect_analysis()
 # average_detection_failure()
 # abnormality_value_analyzer()
-
+#
 # tasrid_analysis()
 # tasrid_abnormality_value_analyzer()
+#
+#
+# best_selected_models_performance_comparisons()
 
 
-best_selected_models_performance_comparisons()
-
-
+early_stopping_insights()
+print('successful run!')

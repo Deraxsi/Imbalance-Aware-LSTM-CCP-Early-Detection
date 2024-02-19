@@ -1,3 +1,5 @@
+import sys
+
 import os
 
 import tensorflow.keras.losses
@@ -9,6 +11,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # noqa: E402
 import re
 
 import json
+
+import glob
 
 from itertools import product
 
@@ -194,7 +198,7 @@ class BinaryControlChartPatterns:
     def data_provider(self):
         raw_data = self.data_generator()
         normalized_data, scaler = self.data_preprocessor(raw_data)
-        return normalized_data, scaler
+        return normalized_data, scaler, raw_data
 
     def abnormality_rate_sepcifier(self, subclass_name):
         """This method determines the abnormality rate based on a given subclass name, e.g.:
@@ -1152,7 +1156,10 @@ class UnluClassifiers:
             class_weight = {0: total/negatives, 1: total/positives}
         else:
             class_weight = None
-        monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=0, mode='auto')
+        # monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=0, mode='auto')
+
+        monitor = MultiObjectiveEarlyStopping(patience=10, kappa=0, minimum_no_epochs=10, verbosity=0)
+
         model.fit(x=train_data[0], y=train_data[1], validation_data=valid_data, callbacks=[monitor], epochs=400,
                   batch_size=50, verbose=0, class_weight=class_weight)
 
@@ -1245,7 +1252,7 @@ class Experimenter:
                                                   abnormality_parameters={'pattern_name': self.pattern_name,
                                                                           'parameter_value': self.abnormality_value},
                                                   chart_type='mixed')
-        mixed_data, mixed_scaler = mixed_charts.data_provider()
+        mixed_data, mixed_scaler, raw_data = mixed_charts.data_provider()
 
         convn_charts = BinaryControlChartPatterns(name='convn_data',
                                                   dataset_distribution=self.convn_distribution,
@@ -1254,7 +1261,18 @@ class Experimenter:
                                                   abnormality_parameters={'pattern_name': self.pattern_name,
                                                                           'parameter_value': self.abnormality_value},
                                                   chart_type='convn')
-        convn_data, convn_scaler = convn_charts.data_provider()
+        convn_data, convn_scaler, _ = convn_charts.data_provider()
+
+        common_test_data = raw_data['test']
+        normalized_common_test = {}
+        for subclass_name in common_test_data.keys():
+            normalized_features = convn_scaler.transform(common_test_data[subclass_name][0])
+            labels = common_test_data[subclass_name][1]
+            normalized_common_test[subclass_name] = normalized_features, labels
+
+        convn_data['test'] = normalized_common_test
+
+        self.convn_distribution['test'] = self.mixed_distribution['test']
 
         self.mixed_data = mixed_data
         self.convn_data = convn_data
@@ -1304,19 +1322,11 @@ class Experimenter:
                                          is_cost_sensitive=is_cost_sensitive,
                                          chart_type=chart_type)
 
-                unlu_cost2021 = UnluClassifiers(imbalanced_ratio=self.imbalanced_ratio,
-                                                is_cost_sensitive=is_cost_sensitive)
-                unlu_lstm = unlu_cost2021.build(self.time_window)
-
                 if chart_type == 'mixed':
                     trained_classifier, metrics_on_test = classifier.fit_per_dataset(self.mixed_data,
                                                                                      self.time_window,
                                                                                      self.abnormality_value,
                                                                                      self.mixed_distribution)
-
-                    trained_unlu_model, metrics_on_test_unlu = unlu_cost2021.fit_per_dataset(unlu_lstm,
-                                                                                             self.mixed_data,
-                                                                                             self.mixed_distribution)
 
                 else:
                     trained_classifier, metrics_on_test = classifier.fit_per_dataset(self.convn_data,
@@ -1324,15 +1334,17 @@ class Experimenter:
                                                                                      self.abnormality_value,
                                                                                      self.convn_distribution)
 
-                    trained_unlu_model, metrics_on_test_unlu = unlu_cost2021.fit_per_dataset(unlu_lstm,
-                                                                                             self.convn_data,
-                                                                                             self.convn_distribution)
-
                 trained_classifiers[f'{chart_type}_CS={str(is_cost_sensitive)[0]}'] = trained_classifier
                 evaluations_on_test[f'{chart_type}_CS={str(is_cost_sensitive)[0]}'] = metrics_on_test
 
-                trained_classifiers[f'{chart_type}_CS={str(is_cost_sensitive)[0]}_Unlu'] = trained_unlu_model
-                evaluations_on_test[f'{chart_type}_CS={str(is_cost_sensitive)[0]}_Unlu'] = metrics_on_test_unlu
+        unlu_cost2021 = UnluClassifiers(imbalanced_ratio=self.imbalanced_ratio, is_cost_sensitive=True)
+        unlu_lstm = unlu_cost2021.build(self.time_window)
+        trained_unlu_model, metrics_on_test_unlu = unlu_cost2021.fit_per_dataset(unlu_lstm,
+                                                                                 self.convn_data,
+                                                                                 self.convn_distribution)
+
+        trained_classifiers[f'Unlu_CS={str(is_cost_sensitive)[0]}'] = trained_unlu_model
+        evaluations_on_test[f'Unlu_CS={str(is_cost_sensitive)[0]}'] = metrics_on_test_unlu
 
         return trained_classifiers, evaluations_on_test
 
@@ -1458,60 +1470,78 @@ class Experimenter:
             detection_times[trainer_id] = times
             detection_rates[trainer_id] = rates
 
-        df_time = pd.DataFrame(detection_times)
-        df_time.insert(0, 'Pattern Name', self.pattern_name)
-        df_time.insert(1, 'Imbalanced Ratio', self.imbalanced_ratio)
-        df_time.insert(2, 'Time Window', self.time_window)
-        df_time.insert(3, 'Abnormality Value', self.abnormality_value)
+        arlidx = pd.DataFrame(detection_times).mean().to_frame('ARLIDX')
 
-        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Detection Times', self.pattern_name)
-        os.makedirs(saving_directory, exist_ok=True)
-        # saving_name = f"{self.time_window}_{self.abnormality_value}_{self.imbalanced_ratio}.csv"
-        saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
-        df_time.to_csv(os.path.join(saving_directory, saving_name), index=False)
+        early_detection_metrics = pd.DataFrame(detection_rates).T
+        early_detection_metrics.columns = ['USP', "TASRID", 'TAR']
 
-        metrics = ['Undetected Samples Percentage', 'Mean True Alert Streaks from Initial Detection', 'True Alert Rate']
-        df_rates = pd.DataFrame(detection_rates)
-        df_rates['Detection Rates Metrics'] = metrics
-        df_rates.insert(0, 'Pattern Name', self.pattern_name)
-        df_rates.insert(1, 'Imbalanced Ratio', self.imbalanced_ratio)
-        df_rates.insert(2, 'Time Window', self.time_window)
-        df_rates.insert(3, 'Abnormality Value', self.abnormality_value)
-        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Detection Rates', self.pattern_name)
+        classification_metrics = pd.DataFrame(evaluations_on_test).T
+
+        combined_df = pd.concat([arlidx, early_detection_metrics, classification_metrics], axis=1)
+
+        combined_df.insert(0, 'Pattern Name', self.pattern_name)
+        combined_df.insert(1, 'Imbalanced Ratio', self.imbalanced_ratio)
+        combined_df.insert(2, 'Time Window', self.time_window)
+        combined_df.insert(3, 'Abnormality Value', self.abnormality_value)
+
+        combined_df.index.name = "Methods"
+
+        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', self.pattern_name)
         os.makedirs(saving_directory, exist_ok=True)
         saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
-        df_rates.to_csv(os.path.join(saving_directory, saving_name), index=False)
+        combined_df.to_csv(os.path.join(saving_directory, saving_name), index=True, float_format='%.6f')
 
-        df_evaluations_on_test = pd.DataFrame(evaluations_on_test)
-        mdf_evaluations_on_test = df_evaluations_on_test.T
-        mdf_evaluations_on_test.insert(0, "Pattern Name", self.pattern_name)
-        mdf_evaluations_on_test.insert(1, "Imbalanced Ratio", self.imbalanced_ratio)
-        mdf_evaluations_on_test.insert(2, "Time Window", self.time_window)
-        mdf_evaluations_on_test.insert(3, "Abnormality Value", self.abnormality_value)
-        saving_directory = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', 'Test Evaluations', self.pattern_name)
-        os.makedirs(saving_directory, exist_ok=True)
-        saving_name = f"{self.imbalanced_ratio}_{self.abnormality_value}_{self.time_window}.csv"
-        mdf_evaluations_on_test.to_csv(os.path.join(saving_directory, saving_name), index=True)
 
-        print('done')
+def results_concatenator(pattern_name):
 
+    results_directories = os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', pattern_name, "*.csv")
+    csv_files = glob.glob(results_directories)
+    combined_df = pd.concat((pd.read_csv(f) for f in csv_files), ignore_index=True)
+
+    combined_df.to_csv(os.path.join(os.getcwd(), 'Comparison-with-Unlu2021', pattern_name, f'{pattern_name}.csv'),
+                       index=False)
+
+
+def main(pattern_name):
+    detection_horizon = 120
+
+    imbalanced_ratios = [0.95, 0.9, 0.75, 0.5]
+    abnormality_values = [0.005, 0.08, 0.155, 0.23, 0.305, 0.38, 0.455, 0.53, 0.605, 0.68, 0.755, 0.83, 0.905,
+                          0.98, 1.055, 1.13, 1.205, 1.28, 1.355, 1.43, 1.505, 1.58, 1.655, 1.73, 1.805]
+    time_windows = [30, 50, 80]
+
+    for imbalanced_ratio in imbalanced_ratios:
+        for abnormality_value in abnormality_values:
+            for time_window in time_windows:
+                experimenter = Experimenter(pattern_name, time_window, abnormality_value, imbalanced_ratio,
+                                            detection_horizon)
+                experimenter.main()
+
+    results_concatenator(pattern_name)
 
 
 if __name__ == "__main__":
 
-    pattern_names = ["upshift", "downtrend", "uptrend", "downshift", "systematic", "stratification", "cyclic"]
-    time_windows = [30, 50, 80]
-    imbalanced_ratios = [0.95, 0.9, 0.75, 0.5]
-    detection_horizon = 120
-
-    abnormality_values = [0.005, 0.08, 0.155, 0.23, 0.305, 0.38, 0.455, 0.53, 0.605, 0.68, 0.755, 0.83,
-                          0.905, 0.98, 1.055, 1.13, 1.205, 1.28, 1.355, 1.43, 1.505, 1.58, 1.655, 1.73,
-                          1.805]
-
-    for pattern_name in pattern_names:
-        for imbalanced_ratio in imbalanced_ratios:
-            for abnormality_value in abnormality_values:
-                for time_window in time_windows:
-                    experimenter = Experimenter(pattern_name, time_window, abnormality_value, imbalanced_ratio,
-                                                detection_horizon)
-                    experimenter.main()
+    # pattern_names = ["upshift", "downtrend", "uptrend", "downshift", "systematic", "stratification", "cyclic"]
+    # time_windows = [30, 50, 80]
+    # imbalanced_ratios = [0.95, 0.9, 0.75, 0.5]
+    # detection_horizon = 120
+    #
+    # abnormality_values = [0.005, 0.08, 0.155, 0.23, 0.305, 0.38, 0.455, 0.53, 0.605, 0.68, 0.755, 0.83,
+    #                       0.905, 0.98, 1.055, 1.13, 1.205, 1.28, 1.355, 1.43, 1.505, 1.58, 1.655, 1.73,
+    #                       1.805]
+    #
+    # for pattern_name in pattern_names:
+    #     for imbalanced_ratio in imbalanced_ratios:
+    #         for abnormality_value in abnormality_values:
+    #             for time_window in time_windows:
+    #                 experimenter = Experimenter(pattern_name, time_window, abnormality_value, imbalanced_ratio,
+    #                                             detection_horizon)
+    #                 experimenter.main()
+    #
+    # results_concatenator()
+    if len(sys.argv) != 2:
+        print("Usage: python comparison_with_Unlu2021Cost.py <pattern_name>")
+        sys.exit(1)
+    pattern_name = sys.argv[1]
+    main(pattern_name)

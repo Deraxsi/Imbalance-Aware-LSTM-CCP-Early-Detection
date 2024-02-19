@@ -1,0 +1,4 @@
+Pattern Name,Imbalanced Ratio,Time Window,Abnormality Value,mixed_CS=T,mixed_CS=F,convn_CS=T,convn_CS=F,Detection Rates Metrics
+downtrend,0.75,30,0.005,0.0,0.0,0.0,0.0,Undetected Samples Percentage
+downtrend,0.75,30,0.005,0.07903581267217631,0.021625344352617083,0.06170798898071625,0.020798898071625344,Mean True Alert Streaks from Initial Detection
+downtrend,0.75,30,0.005,0.7183471074380166,0.2450413223140496,0.7314325068870523,0.2366115702479339,True Alert Rate
