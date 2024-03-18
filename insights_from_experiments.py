@@ -1,4 +1,4 @@
-
+from scipy.stats import wilcoxon, friedmanchisquare, kruskal, mannwhitneyu
 import os
 from turtle import width
 import re
@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 import seaborn as sb
 pd.set_option('display.max_columns', None)
+
+
 
 
 def get_combined_method(row):
@@ -729,6 +731,26 @@ def interpret_kappa(row):
             raise ValueError("kappa is not found!")
 
 
+def select_methods(group):
+    bes = group[group['Method'] == "BES"].nsmallest(1, 'Distance Test')
+    # Get the row for LES and GES
+    les = group[group['Method'] == "LES"]
+    ges = group[group['Method'] == "GES"]
+
+    # Combine these selections
+    combined = pd.concat([les, bes, ges])
+
+    return combined
+
+
+def select_best_bes(group):
+    bes = group[group["Method"] == "BES"].nsmallest(1, 'Distance ITest')
+    les = group[group['Method'] == "LES"]
+    ges = group[group['Method'] == "GES"]
+    combined = pd.concat([bes, les, ges])
+    return combined
+
+
 def early_stopping_insights():
     file_name = os.path.join(os.getcwd(), 'Early-stopping', 'New-experiments', 'early-stoppings.xlsx')
     df = pd.read_excel(file_name, sheet_name='early-stoppings')
@@ -741,6 +763,7 @@ def early_stopping_insights():
 
     df['Distance Valid'] = np.sqrt(df['valid_loss'] ** 2 + (df['valid_gmean'] - 1) ** 2)
     df['Distance Test'] = np.sqrt(df['btest_loss'] ** 2 + (df['btest_gmean'] - 1) ** 2)
+    df['Distance ITest'] = np.sqrt(df['itest_loss'] ** 2 + (df['itest_gmean'] - 1) ** 2)
 
     df['Kappa'] = df['Monitoring Method'].apply(interpret_kappa)
 
@@ -750,6 +773,9 @@ def early_stopping_insights():
 
     # Step 2: Identify rows with minimum 'Distance Test'
     df['Is_Min'] = df['Distance Test'] == df['Min Distance Test']
+
+    df['Method'] = df['Monitoring Method'].apply(
+        lambda x: "LES" if x == 'loss_method' else ('GES' if x == 'gmean_method' else 'BES'))
 
     # Step 3: Filter for winning rows and count wins by Kappa
     winning_rows = df[df['Is_Min']]
@@ -771,49 +797,47 @@ def early_stopping_insights():
     custom_labels = ['0' if kappa == 0.0 else r'$\infty$' if kappa == 110.0 else f"{kappa:.1f}" for kappa in
                      kappa_values]
 
-    for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
-        pattern_data = win_counts_long[(win_counts_long['Pattern'] == row['Pattern']) &
-                                       (win_counts_long['Window Length'] == row['Window Length'])]
+    # for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
+    #     pattern_data = win_counts_long[(win_counts_long['Pattern'] == row['Pattern']) &
+    #                                    (win_counts_long['Window Length'] == row['Window Length'])]
+    #
+    #     max_wins = pattern_data['Wins'].max()
+    #     custom_palette = ['#4682B4' if wins == max_wins else '#FF6347' for wins in pattern_data['Wins']]
+    #
+    #     plt.figure(figsize=(12, 6))
+    #     ax = sb.barplot(x='Kappa', y='Wins', data=pattern_data, palette=custom_palette, dodge=True, linewidth=1.)
+    #
+    #     plt.xlabel(r'$\kappa$', fontsize=24)
+    #     plt.ylabel('Total Wins', fontsize=18)
+    #
+    #     label_interval = 5
+    #     tick_positions = np.arange(len(kappa_values))
+    #     selected_ticks = tick_positions[::label_interval]
+    #     if selected_ticks[-1] != tick_positions[-1]:
+    #         selected_ticks = np.append(selected_ticks, tick_positions[-1])
+    #     selected_labels = [custom_labels[i] for i in selected_ticks]
+    #
+    #     ax.set_xticks(selected_ticks)
+    #     ax.set_xticklabels(selected_labels, rotation=45, fontsize=14)
+    #
+    #     y_ticks = np.arange(1, max_wins + 1, step=2)
+    #     ax.set_yticks(y_ticks)
+    #
+    #     max_value = pattern_data['Wins'].max()
+    #     ax.axhline(max_value, color='#4682B4', linestyle='--', linewidth=1)
+    #
+    #     plt.xticks(fontsize=20)
+    #     plt.yticks(fontsize=20)
+    #
+    #     xtick_labels = ax.get_xticklabels()
+    #     xtick_labels[-1].set_fontsize(30)
+    #     xtick_labels[0].set_fontsize(26)
+    #
+    #     plt.tight_layout()
+    #     save_name = 'No. Wins ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
+    #     plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
+    #     plt.close()
 
-        max_wins = pattern_data['Wins'].max()
-        custom_palette = ['#4682B4' if wins == max_wins else '#FF6347' for wins in pattern_data['Wins']]
-
-        plt.figure(figsize=(12, 6))
-        ax = sb.barplot(x='Kappa', y='Wins', data=pattern_data, palette=custom_palette, dodge=True, linewidth=1.)
-
-        plt.xlabel(r'$\kappa$', fontsize=24)
-        plt.ylabel('Total Wins', fontsize=18)
-
-        label_interval = 5
-        tick_positions = np.arange(len(kappa_values))
-        selected_ticks = tick_positions[::label_interval]
-        if selected_ticks[-1] != tick_positions[-1]:
-            selected_ticks = np.append(selected_ticks, tick_positions[-1])
-        selected_labels = [custom_labels[i] for i in selected_ticks]
-
-        ax.set_xticks(selected_ticks)
-        ax.set_xticklabels(selected_labels, rotation=45, fontsize=14)
-
-        y_ticks = np.arange(1, max_wins + 1, step=2)
-        ax.set_yticks(y_ticks)
-
-        max_value = pattern_data['Wins'].max()
-        ax.axhline(max_value, color='#4682B4', linestyle='--', linewidth=1)
-
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-
-        xtick_labels = ax.get_xticklabels()
-        xtick_labels[-1].set_fontsize(30)
-        xtick_labels[0].set_fontsize(26)
-
-        plt.tight_layout()
-        save_name = 'No. Wins ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
-        plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
-        plt.close()
-
-        #
-        #
         #
         # plt.figure(figsize=(8, 4))
         #
@@ -828,7 +852,139 @@ def early_stopping_insights():
         # plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
         # plt.close()
 
-    df.to_csv(os.path.join(saving_directory, 'igd_distances.csv'), index=False, float_format="%6f")
+    # df.to_csv(os.path.join(saving_directory, 'igd_distances.csv'), index=False, float_format="%6f")
+    #
+    # gd_df = df.groupby(['Pattern', 'Window Length', "Kappa"]).mean().reset_index()
+    #
+    # for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
+    #     pattern_data = gd_df[(gd_df['Pattern'] == row['Pattern']) & (gd_df['Window Length'] == row['Window Length'])]
+    #
+    #     min_gd = pattern_data['Distance Test'].min()
+    #     custom_palette = ['#4682B4' if d == min_gd else '#FF6347' for d in pattern_data['Distance Test']]
+    #
+    #     plt.figure(figsize=(12, 6))
+    #     # ax = sb.barplot(x='Kappa', y='Distance Test', data=pattern_data, palette=custom_palette, dodge=True,
+    #     #                 linewidth=1.)
+    #     ax = sb.lineplot(x='Kappa', y='Distance Test', data=pattern_data, palette=custom_palette, linewidth=1.2)
+    #
+    #     plt.xlabel(r'$\kappa$', fontsize=24)
+    #     plt.ylabel('Generational Distance', fontsize=18)
+    #
+    #     label_interval = 5
+    #     tick_positions = np.arange(len(kappa_values))
+    #     selected_ticks = tick_positions[::label_interval]
+    #     if selected_ticks[-1] != tick_positions[-1]:
+    #         selected_ticks = np.append(selected_ticks, tick_positions[-1])
+    #     selected_labels = [custom_labels[i] for i in selected_ticks]
+    #
+    #     ax.set_xticks(selected_ticks)
+    #     ax.set_xticklabels(selected_labels, rotation=45, fontsize=14)
+    #     max_gd = pattern_data['Distance Test'].max()
+    #
+    #     limit = 0.2 if (row['Pattern'] == 'Cyclic' or row['Pattern'] == 'Stratification') else 0.09
+    #     y_ticks = np.arange(min_gd-0.02, max_gd + limit, step=round((max_gd + limit)/4, 2))
+    #     ax.set_yticks(y_ticks)
+    #
+    #     ax.axhline(min_gd, color='#4682B4', linestyle='--', linewidth=1)
+    #
+    #     plt.xticks(fontsize=20)
+    #     plt.yticks(fontsize=20)
+    #
+    #     xtick_labels = ax.get_xticklabels()
+    #     xtick_labels[-1].set_fontsize(30)
+    #     xtick_labels[0].set_fontsize(26)
+    #
+    #     plt.tight_layout()
+    #     save_name = 'Generational Distance ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
+    #     plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
+    #     plt.close()
+
+    # df_methods = df.groupby(['Pattern', 'Window Length', "Kappa"]).mean().reset_index()
+
+    pdf = df.groupby(by=["Pattern", "Window Length", 'Abnormality Value']).apply(select_best_bes).reset_index(drop=True)
+    pdf.to_csv(os.path.join(saving_directory, "wilcoxon_rawdata.csv"), index=False)
+
+    wilcoxon_results = pd.DataFrame(columns=['Pattern', 'Window Length', 'Comparison', 'Statistic', 'P-Value'])
+
+    for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
+        pattern_data = pdf[(pdf['Pattern'] == row['Pattern']) & (pdf['Window Length'] == row['Window Length'])]
+
+        pivot_methods = pattern_data.pivot_table(index=['Pattern', 'Abnormality Value'], columns='Method',
+                                                 values='Distance Test', aggfunc='first').reset_index()
+
+        bes_data = pivot_methods['BES'].values
+        ges_data = pivot_methods['GES'].values
+        les_data = pivot_methods['LES'].values
+
+        # Pairwise Wilcoxon signed-rank tests
+        stat_bes_ges, p_bes_ges = wilcoxon(bes_data, ges_data, zero_method="zsplit")
+        stat_bes_les, p_bes_les = wilcoxon(bes_data, les_data, zero_method='zsplit')
+        stat_ges_les, p_ges_les = wilcoxon(ges_data, les_data, zero_method='zsplit')
+
+        results_to_append = [
+            {'Pattern': row['Pattern'], 'Window Length': row['Window Length'], 'Comparison': 'BES vs. GES',
+             'Statistic': stat_bes_ges, 'P-Value': p_bes_ges},
+            {'Pattern': row['Pattern'], 'Window Length': row['Window Length'], 'Comparison': 'BES vs. LES',
+             'Statistic': stat_bes_les, 'P-Value': p_bes_les},
+            {'Pattern': row['Pattern'], 'Window Length': row['Window Length'], 'Comparison': 'GES vs. LES',
+             'Statistic': stat_ges_les, 'P-Value': p_ges_les}
+        ]
+
+        wilcoxon_results = wilcoxon_results.append(results_to_append, ignore_index=True)
+
+    wilcoxon_results.to_csv(os.path.join(saving_directory, "wilcoxon_results.csv"), index=False)
+    print('done')
+
+
+
+
+
+
+
+    # igd_df = df.groupby(['Pattern', 'Window Length', "Kappa"])['Distance Test'].min().reset_index()
+    #
+    # for i, (index, row) in enumerate(unique_combinations.iterrows(), start=1):
+    #     pattern_data = igd_df[(igd_df['Pattern'] == row['Pattern']) & (igd_df['Window Length'] == row['Window Length'])]
+    #
+    #     min_igd = pattern_data['Distance Test'].min()
+    #     custom_palette = ['#4682B4' if d == min_igd else '#FF6347' for d in pattern_data['Distance Test']]
+    #
+    #     plt.figure(figsize=(12, 6))
+    #     ax = sb.barplot(x='Kappa', y='Distance Test', data=pattern_data, palette=custom_palette, dodge=True,
+    #                     linewidth=1.)
+    #
+    #     plt.xlabel(r'$\kappa$', fontsize=24)
+    #     plt.ylabel('Inverted Generational Distance', fontsize=18)
+    #
+    #     label_interval = 5
+    #     tick_positions = np.arange(len(kappa_values))
+    #     selected_ticks = tick_positions[::label_interval]
+    #     if selected_ticks[-1] != tick_positions[-1]:
+    #         selected_ticks = np.append(selected_ticks, tick_positions[-1])
+    #     selected_labels = [custom_labels[i] for i in selected_ticks]
+    #
+    #     ax.set_xticks(selected_ticks)
+    #     ax.set_xticklabels(selected_labels, rotation=45, fontsize=14)
+    #     max_igd = pattern_data['Distance Test'].max()
+    #     y_ticks = np.arange(0, max_igd + 0.01, step=0.05)
+    #     ax.set_yticks(y_ticks)
+    #
+    #     ax.axhline(min_igd, color='#4682B4', linestyle='--', linewidth=1)
+    #
+    #     plt.xticks(fontsize=20)
+    #     plt.yticks(fontsize=20)
+    #
+    #     xtick_labels = ax.get_xticklabels()
+    #     xtick_labels[-1].set_fontsize(30)
+    #     xtick_labels[0].set_fontsize(26)
+    #
+    #     plt.tight_layout()
+    #     save_name = 'Inverted Generational Distance ' + row['Pattern'] + ' ' + str(row['Window Length']) + '.png'
+    #     plt.savefig(os.path.join(saving_directory, save_name), dpi=300, bbox_inches='tight')
+    #     plt.close()
+
+    print('done')
+
 
 
 
@@ -854,7 +1010,6 @@ def early_stopping_insights():
 #
 #
 # best_selected_models_performance_comparisons()
-
 
 early_stopping_insights()
 print('successful run!')
