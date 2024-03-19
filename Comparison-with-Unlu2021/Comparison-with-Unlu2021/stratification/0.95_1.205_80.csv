@@ -1,3 +1,0 @@
-Methods,Pattern Name,Imbalanced Ratio,Time Window,Abnormality Value,ARLIDX,USP,TASRID,TAR,loss,specificity,sensitivity,accuracy,geometric_mean
-mixed_CS=T,stratification,0.950000,80,1.205000,10.693333,0.000000,0.144931,0.853003,0.083615,0.954737,0.760000,0.945000,0.851822
-Unlu_CS=T,stratification,0.950000,80,1.205000,50.646667,0.000000,0.185344,0.513747,0.160616,1.000000,0.360000,0.968000,0.600000
