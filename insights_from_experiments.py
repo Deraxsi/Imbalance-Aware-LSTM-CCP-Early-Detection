@@ -11,8 +11,6 @@ import seaborn as sb
 pd.set_option('display.max_columns', None)
 
 
-
-
 def get_combined_method(row):
     method = row['method']
     cost_sensitivity = row['cost_sensitivity']
