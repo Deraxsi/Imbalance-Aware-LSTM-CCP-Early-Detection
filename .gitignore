@@ -1,3 +1,28 @@
+# results folders
+Comparison-with-Unlu2021/
+Early Detection Analysis/
+Early-stopping/
+Exluded-Scripts/
+Offline_Heatmaps_Results/
+Synthetic Comparison/
+
+Redrawn-Heatmaps/
+
+# Ignore earlystopping_visualization.py: Visualizes early-stopping on a dataset.
+earlystopping_visualization.py
+
+# Ignore heatmap_redrawing.py: Updates figure aesthetics only.
+heatmap_redrawing.py
+
+# Ignore figures script
+insights_from_experiments.py
+
+
+
+
+
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
