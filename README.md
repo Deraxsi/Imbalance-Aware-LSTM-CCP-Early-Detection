@@ -31,7 +31,7 @@ Follow these steps to set up the project and run it on your local machine.
 
 ## Citing Our Work
 
-If you find our model useful or our research contributes to your work, we kindly encourage you to cite our publication. This support not only recognizes our effort but also helps enhance the impact of our research:
+If you find our model useful or our research contributes to your work, we kindly encourage you to cite our publication. This support not only recognizes our effort but also helps enhance the impact of our research. The paper can be accessed [here](https://www.sciencedirect.com/science/article/abs/pii/S0957417424005487)
 
    ```plaintext
    @article{derakhshi2024imbalance,
@@ -43,5 +43,3 @@ If you find our model useful or our research contributes to your work, we kindly
      year={2024},
      publisher={Elsevier}
    }
-
-   Paper Link: https://www.sciencedirect.com/science/article/abs/pii/S0957417424005487
