@@ -12,11 +12,7 @@ This project blends rigorous research with practical application, aiming to set 
 ## Key Highlights
 
 - **Research-Driven**: Our model tackles critical challenges such as class imbalance and the limitations of simulated data, enhancing detection in real-time production environments.
-- **Evidence-Based**: Extensively validated using both simulated datasets and real-world data from biomanufacturing and wafer industries, demonstrating superior performance and reliability.
-
-<p align="center">
-  <a href="github-figures/Figure19.png">Key Findings</a>
-</p>
+- **Evidence-Based**: Extensively validated using both simulated datasets and real-world data from biomanufacturing and wafer industries, demonstrating superior performance and stability.
 
 <p align="center">
   <img src="github-figures/Figure19.png" alt="Understanding CCPR Classifier Stability with the TASRID Index">
