@@ -31,10 +31,11 @@ class NumpyArrayEncoder(json.JSONEncoder):
 
 class BinaryControlChartPatterns:
     """
-    This class generates a set of simulated datasets for the problem of control chart pattern recognition based on the
-    equations in the paper of:
-        A weighted support vector machine method for control chart pattern recognition, written by Petros
-        Xanthopoulos and Talayeh Razzaghi.
+    This class generates a set of simulated datasets for the problem of control chart pattern recognition based on
+    the equations in the paper of:
+        An imbalance-aware BiLSTM for control chart patterns early detection, written by
+            Mohammad Derakhshi and Talayeh Razzaghi.
+            https://www.sciencedirect.com/science/article/abs/pii/S0957417424005487
 
     """
     def __init__(self, name, dataset_distribution, time_window=10, imbalanced_ratio=0.95,
@@ -42,7 +43,8 @@ class BinaryControlChartPatterns:
         """
         Args:
             name (str): name of the generated dataset
-            dataset_distribution (dict): a dictionary determining the number of data points in each set and subclass
+            dataset_distribution (dict): a dictionary determining the number of data points in each set and
+                subclasses:
 
                 {train: {normal: 570, abnormal_0.2: 6, abnormal_0.4: 6, ..., abnormal_0.8: 6, abnormal_1: 6}
                 valid: {normal: 190, abnormal_0.2: 2, abnormal_0.4: 2, ..., abnormal_0.8: 2, abnormal_1: 2}

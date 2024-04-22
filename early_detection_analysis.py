@@ -49,8 +49,9 @@ class BinaryControlChartPatterns:
     """
     This class generates a set of simulated datasets for the problem of control chart pattern recognition based on the
     equations in the paper of:
-        A weighted support vector machine method for control chart pattern recognition, written by Petros
-        Xanthopoulos and Talayeh Razzaghi.
+        An imbalance-aware BiLSTM for control chart patterns early detection, written by
+            Mohammad Derakhshi and Talayeh Razzaghi.
+            https://www.sciencedirect.com/science/article/abs/pii/S0957417424005487
 
     """
 
