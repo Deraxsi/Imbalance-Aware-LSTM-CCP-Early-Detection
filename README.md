@@ -4,13 +4,13 @@ Discover our Imbalance-Aware LSTM Model tailored for Control Chart Pattern Recog
 ## Introduction
 This project blends rigorous research with practical application, aiming to set new standards in control chart pattern recognition (CCPR) and fault detection.
 
-![Key Findings](github-figures/figure21.png)
+![Key Findings](github-figures/figure21.pdf)
 
 ## Key Highlights
 
 - **Research-Driven**: Our model tackles critical challenges such as class imbalance and the limitations of simulated data, enhancing detection in real-time production environments.
 - **Evidence-Based**: Extensively validated using both simulated datasets and real-world data from biomanufacturing and wafer industries, demonstrating superior performance and reliability.
-![Key Findings](github-figures/figure19.png)
+![Key Findings](github-figures/figure19.pdf)
 
 
 ## Quick Start Guide
