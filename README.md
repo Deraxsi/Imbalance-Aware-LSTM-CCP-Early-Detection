@@ -5,7 +5,7 @@ Discover our Imbalance-Aware LSTM Model tailored for Control Chart Pattern Recog
 This project blends rigorous research with practical application, aiming to set new standards in control chart pattern recognition (CCPR) and fault detection.
 
 <p align="center">
-  <img src="github-figures/Figure21.png" alt="Quality Control in Bio-pharmaceuticals">
+  <img src="Input_data/github-figures/Figure21.png" alt="Quality Control in Bio-pharmaceuticals">
 </p>
 
 
@@ -15,7 +15,7 @@ This project blends rigorous research with practical application, aiming to set 
 - **Evidence-Based**: Extensively validated using both simulated datasets and real-world data from biomanufacturing and wafer industries, demonstrating superior performance and stability.
 
 <p align="center">
-  <img src="github-figures/Figure19.png" alt="Understanding CCPR Classifier Stability with the TASRID Index">
+  <img src="Input_data/github-figures/Figure19.png" alt="Understanding CCPR Classifier Stability with the TASRID Index">
 </p>
 
 
